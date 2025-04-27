@@ -1,0 +1,237 @@
+---
+title: "Reading Stats"
+format:
+  dashboard: 
+    theme: css/brite_man.scss
+---
+
+```{r libraries, echo=F, message=F, warning=F}
+library(tidyverse)
+library(plotly)
+library(notionR)
+library(scales)
+```
+
+```{r load data from notion, echo=F, message=F, warning=F}
+#Book Data
+book_id<-"16dea272399480158543cf561e4f6bf7"
+
+book_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = book_id
+)
+
+book_cols<-c("properties.Book.title.plain_text","properties.Author.relation.id","properties.Genre.relation.id","properties.Duration.formula.number", "properties.Finished.date.start","properties.Own.status.name","properties.Pages.number","properties.Rating.number","properties.Stars.formula.string","properties.Started.date.start","properties.Status.status.name")
+
+books<-book_not %>% select(book_cols)
+
+colnames(books)<-c("title", "author_id","genre_id","duration","date_fin","own","pages", "rate","stars","date_start", "status")
+
+#Author Data
+auth_id<-"16dea27239948046a8ebed7a02b154de"
+auth_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = auth_id
+)
+auth_cols<-c("properties.Author.title.plain_text","id")
+authors<-auth_not %>% select(auth_cols)
+colnames(authors)<-c("author", "author_id")
+
+#Genre Data
+genre_id<-"16dea272399480ef8724d10faad4e553"
+genre_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = genre_id
+)
+genre_cols<-c("icon.emoji", "id", "properties.Genre.title.plain_text")
+genres<-genre_not %>% select(genre_cols)
+colnames(genres)<-c("genre_icon", "genre_id", "genre")
+
+books_auth<-left_join(books, authors)
+books<-left_join(books_auth, genres)
+
+#organize
+books<-books %>% select(title, author, genre, genre_icon, status, pages, date_start, date_fin, rate, stars, own)
+books<-separate(books, date_fin, into = c("year","month","day"), remove = F)
+
+#numeric columns
+books[,c(6,9,10,11,12)]<-lapply(books[,c(6,9,10,11,12)], as.numeric)
+```
+
+# Stats
+
+## Counters {height="15%"; style="font-size: clamp(.1em, 1cqw, 2em)"}
+
+```{r box values, echo=F}
+book_yr<-books %>% filter(year==2025, status=="Finished") %>% summarise(count=n())
+
+```
+
+```{r}
+#| content: valuebox
+#| title: "Books Read"
+list(
+  icon = "book-half",
+  color = "success",
+  value = book_yr$count
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Reading Goal"
+list(
+  icon = "book-fill",
+  color = "info",
+  value = 30
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Goal Books Left"
+list(
+  icon = "book",
+  color = "danger",
+  value = 30-book_yr$count
+)
+```
+
+## Plots {height="85%"}
+
+```{r}
+
+genres=c("Holiday", "Fantasy", "Romance", "Poetry", "Paranormal", "Horror", "Mystery", "Biography", "Self Help", "Science Fiction","Thriller/Suspense", "Literary Fiction")
+
+gen_colors<-c("#FFFF66","#00A664", "#FF67B4","#9A004D","#B365FF","#660000","#FF8000", "#99FFFF","#B4FF66","#0000FF", "#FF0100", "#67B3FF")
+
+names(gen_colors)<-genres
+
+gen_count<-books %>% filter(year==2025) %>% 
+  group_by(genre, genre_icon) %>% 
+  summarise(gen_ct=n()) %>% 
+  mutate(ico_ct=paste0(genre_icon, gen_ct))
+
+
+gens<-
+  ggplot(gen_count, aes(x=reorder(genre,gen_ct), y=gen_ct))+
+  geom_bar(stat = "identity", aes(fill=genre), color="black",show.legend = F)+
+  geom_text(aes(label=ico_ct, y=gen_ct/2), size=8)+
+  coord_flip()+
+  scale_fill_manual(values = gen_colors)+
+  labs(x="Genres", y="Count")+
+  scale_y_continuous(expand = c(0,0), breaks = seq(1,300,1))+
+  theme_minimal()
+
+ggplotly(gens) %>% 
+  style(showlegend=F)
+
+```
+
+```{r}
+
+month_ct<-books %>% filter(year==2025) %>% 
+  group_by(month)  %>% 
+  arrange(desc(date_fin)) %>% 
+  mutate(id=row_number(),
+         alpha_re=rescale(id)) %>% 
+  ungroup()
+
+month_ct$month_nm<-month.name[month_ct$month]
+month_ct$month_nm<-factor(month_ct$month_nm, levels = month.name)
+
+month_ct<-month_ct %>% arrange(month_nm, id)
+
+month_cols<-c("#A7C7E7", "#E63946","#4CAF50","#FFD166","#06D6A0","#FF7F50","#00B4D8","#FFC300","#228B22","#F8961E","#C1121F","#118AB2")
+names(month_cols)<-month.name
+
+mon_plot<-
+  ggplot(month_ct, aes(x=month_nm))+
+  geom_tile(aes(y=id, fill=month_nm, alpha=alpha_re), width=1, height=1, color="white", show.legend = F)+
+  geom_text(aes(label=str_wrap(title,16), y=id), color="black", fontface="bold")+
+  scale_alpha(range=c(0.4,1))+
+  scale_fill_manual(values = month_cols)+
+  scale_y_continuous(expand = c(0,0), breaks = seq(1,300,1))+
+  labs(x="Month", y="# of Books")+
+  theme_minimal() + theme(panel.grid = element_blank())
+
+ggplotly(mon_plot) %>% 
+  style(showlegend=F)
+```
+
+# Currently Reading
+
+```{r, echo=F, message=F}
+cur_read<-books %>% filter(status=="Reading")
+
+cov_df<-select(book_not, title=properties.Book.title.plain_text,
+               cov_url=properties.Cover.files.external.url)
+
+cur_read<-left_join(cur_read, cov_df)
+
+book_html <- cur_read %>%
+  mutate(
+    html = glue::glue(
+      '<div class="book">
+         <img src="{cov_url}" alt="{title}" />
+         <p><strong>{title}</strong><br><em>{author}</em></p>
+       </div>'
+    )
+  ) %>%
+  pull(html) %>%
+  paste(collapse = "\n")
+
+book_html <- htmltools::HTML(
+  paste0('<div class="book-gallery">', book_html, '</div>')
+)
+```
+
+```{r currently reading}
+book_html
+```
+
+# Book Stat Ideas
+
+-   [x] Counters on top of page of currently read, Physical TBR
+-   [ ] Page Number breakdown
+-   [ ] Fiction/Nonfiction
+-   [x] Genre side bar plot (ordered descending)
+-   [ ] Format read (add to notion)
+-   [ ] Authors side bar plot (ordered descending)
+-   [x] Number books per month (label n pages)
+-   [ ] Star rating
+-   [ ] Priority TBR w/ current reading
+
+
+
+::: {.hidden}
+<style>
+
+.book-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.book {
+  flex: 1 1 150px;
+  max-width: 150px;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.book img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+
+</style>
+:::
+
+

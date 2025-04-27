@@ -1,0 +1,119 @@
+---
+title: "Reading"
+format:
+  html:
+    theme: brite
+---
+
+```{r}
+library(tidyverse)
+library(notionR)
+library(plotly)
+library(nflplotR)
+```
+
+
+
+Load Data
+```{r}
+#Book Data
+book_id<-"16dea272399480158543cf561e4f6bf7"
+
+book_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = book_id
+)
+
+book_cols<-c("properties.Book.title.plain_text","properties.Author.relation.id","properties.Genre.relation.id","properties.Duration.formula.number", "properties.Finished.date.start","properties.Own.status.name","properties.Pages.number","properties.Rating.number","properties.Stars.formula.string","properties.Started.date.start","properties.Status.status.name")
+
+books<-book_not %>% select(book_cols)
+
+colnames(books)<-c("title", "author_id","genre_id","duration","date_fin","own","pages", "rate","stars","date_start", "status")
+
+#Author Data
+auth_id<-"16dea27239948046a8ebed7a02b154de"
+auth_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = auth_id
+)
+auth_cols<-c("properties.Author.title.plain_text","id")
+authors<-auth_not %>% select(auth_cols)
+colnames(authors)<-c("author", "author_id")
+
+#Genre Data
+genre_id<-"16dea272399480ef8724d10faad4e553"
+genre_not<-getNotionDatabase(
+  secret = Sys.getenv("NOTION_API_SECRET"),
+  database = genre_id
+)
+genre_cols<-c("icon.emoji", "id", "properties.Genre.title.plain_text")
+genres<-genre_not %>% select(genre_cols)
+colnames(genres)<-c("genre_icon", "genre_id", "genre")
+```
+
+Merging Datasets
+```{r}
+books_auth<-left_join(books, authors)
+books<-left_join(books_auth, genres)
+
+#organize
+books<-books %>% select(title, author, genre, genre_icon, status, pages, date_start, date_fin, rate, stars, own)
+books<-separate(books, date_fin, into = c("year","month","day"), remove = F)
+
+#numeric columns
+books[,c(6,9,10,11,12)]<-lapply(books[,c(6,9,10,11,12)], as.numeric)
+```
+
+
+```{r}
+books %>% 
+  ggplot(aes(x=genre_icon))+
+  geom_bar()
+
+mon_count<-books %>% filter(status=="Finished", year==2025) %>% group_by(month) %>% summarise(year_tot=n())
+
+#Wrong January?
+books %>% filter(status=="Finished", year==2025) %>% 
+  ggplot(aes(x=month))+
+  geom_bar()
+
+#Genre Pie
+
+gen_count<-books %>% filter(status=="Finished", year==2025) %>% group_by(genre, genre_icon) %>% summarise(tot=n())
+
+
+books %>% filter(status=="Finished", year==2025) %>% 
+  ggplot(aes(genre_icon, fill=genre)) +
+  geom_bar(width=1) +
+  coord_polar("y", start=0)
+
+ggplot(gen_count, aes(x="", y=tot, fill=genre)) +
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  theme_void()
+
+gen_plot<-ggplot(gen_count, aes(x=genre, y=tot))+
+  geom_bar(stat="identity", aes(fill=genre))+
+  geom_text(aes(label=genre_icon),nudge_y = -0.5)+
+  theme_bw()
+
+ggplotly(gen_plot)
+```
+
+Covers
+```{r}
+cov_df<-select(book_not, title=properties.Book.title.plain_text,
+               cov_url=properties.Cover.files.external.url)
+
+test_cov<-cov_df[1:3,]
+pts<-data.frame(x=c(1:3),
+           y=c(2,2,2))
+
+test_cov<-cbind(test_cov, pts)
+
+ggplot(test_cov, aes(x=x, y=y))+
+  geom_from_path(aes(path=cov_url), width=0.5)
+
+
+```
+
