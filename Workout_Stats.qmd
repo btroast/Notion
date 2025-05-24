@@ -1,0 +1,69 @@
+---
+title: "Workout Stats"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(gmailr)
+library(pelotonR)
+library(purrr)
+
+library(DT) # For table display
+library(Hmisc)
+library(lubridate) # For dates
+library(gameofthrones) # For colors
+
+
+#Gmail API Key
+# AIzaSyCRzzC_LVMOZ54JcurDxECtYMO6AFxFzmM
+```
+
+Login
+```{r}
+pel_auth<-peloton_auth(login = "bvtroast@gmail.com", 
+             password = "Kona.Bay08")
+pel_info<-get_my_info()
+
+pel_id<-pel_info$id
+
+```
+
+Other
+```{r}
+
+```
+
+
+Squint Data
+```{r}
+work_dat<-pelotonR::get_all_workouts(pel_id, n=5000,
+                                     dictionary = list("character"= 
+                                                         c("v2_total_video_watch_time_seconds",
+                                                           "v2_total_video_buffering_seconds", 
+                                                           "effort_zones",
+                                                           "ride_flags")),
+                                    joins = "ride")
+
+
+work_dat<-select(work_dat, start=start_time, end=end_time, category=fitness_discipline, work_id=id, effort_zones, ride_diff=ride_difficulty_rating_avg, ride_duration, pedal_met=ride_has_pedaling_metrics, title=ride_title, )
+
+date<-as.Date(work_dat$start)
+work_dat<-cbind(date, work_dat)
+
+
+count_month<-work_dat %>% group_by(year=year(date),month=month(date), category) %>% summarise(work_count=n())
+count_month$month_nm<-month.abb[count_month$month]
+count_month$month_nm<-factor(count_month$month_nm,levels = month.abb)
+
+ggplot(count_month, aes(month_nm, y=work_count))+
+  geom_bar(stat = "identity", aes(fill=factor(year)))
+
+count_month<-count_month %>% filter(year==2025)
+
+ggplot(count_month,aes(month_nm, work_count))+
+  geom_bar(stat = "identity", aes(fill=category), color="black")+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+```
+

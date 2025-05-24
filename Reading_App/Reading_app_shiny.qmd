@@ -10,6 +10,7 @@ library(tidyverse)
 library(plotly)
 library(notionR)
 library(scales)
+library(photon)
 ```
 
 ```{r load data from notion, echo=F, message=F, warning=F}

@@ -1,0 +1,29 @@
+---
+title: "Creating Desktop App"
+format: html
+---
+
+## 1. Download R Portable
+
+## 2. Copy R Portable files into a new folder for the project
+
+## 3. Add a Scripts folder that will house the files that you run in the app.
+
+## 4. Create a .bat file says to run the file of the app in scripts.
+
+@echo off :: Set path to R Portable SET RPORTABLE=R-Portable\App\R-Portable
+
+:: Run the R script using Rscript.exe %RPORTABLE%\bin\Rscript.exe -e "shiny::runApp('Scripts', launch.browser=TRUE)"
+
+:: Optional: pause to see output echo Script finished. pause
+
+### How to Install Packages
+
+1.  Make sure the .libPaths is set to a folder within R Portable
+    -   Open Rprofile.site which is in R-Portable\\App\\R-Portable\\etc
+    -   Edit to the directory in R-Portable that the libraries folder lives
+    -   WARNING: I may have to change this to a more generic folder structure for when it moves
+2.  Open the R Portable Terminal
+    -   R-Portable \> bin \> R for terminal OR
+    -   R-Portable in main R Portable file is the basic R GUI
+3.  Run install.packages as normal
